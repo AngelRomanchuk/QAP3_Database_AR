@@ -9,11 +9,39 @@ let tasks = [
     { id: 2, description: 'Read a book', status: 'complete' },
 ];
 
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  user: 'postgres',
+  host: 'localhost',
+  database: 'tasks_db',
+  password: '44Aust1n##',
+  port: 5432,
+});
+
 // GET /tasks - Get all tasks
 app.get('/tasks', (req, res) => {
     res.json(tasks);
 });
 
+
+// Create tasks table 
+const createTasksTable = async () => {
+    const query = `
+      CREATE TABLE IF NOT EXISTS tasks (
+        id SERIAL PRIMARY KEY,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL
+      );
+    `;
+    await pool.query(query);
+    console.log('Tasks table is ready.');
+  };
+  
+  // Call this at the start of the application
+  createTasksTable().catch(console.error);
+
+  
 // POST /tasks - Add a new task
 app.post('/tasks', (request, response) => {
     const { id, description, status } = request.body;
