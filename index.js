@@ -19,12 +19,6 @@ const pool = new Pool({
   port: 5432,
 });
 
-// GET /tasks - Get all tasks
-app.get('/tasks', (req, res) => {
-    res.json(tasks);
-});
-
-
 // Create tasks table 
 const createTasksTable = async () => {
     const query = `
@@ -42,41 +36,80 @@ const createTasksTable = async () => {
   createTasksTable().catch(console.error);
 
   
-// POST /tasks - Add a new task
-app.post('/tasks', (request, response) => {
-    const { id, description, status } = request.body;
-    if (!id || !description || !status) {
-        return response.status(400).json({ error: 'All fields (id, description, status) are required' });
+// GET /tasks - Get all tasks
+app.get('/tasks', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM tasks;');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    tasks.push({ id, description, status });
-    response.status(201).json({ message: 'Task added successfully' });
 });
+
+
+// POST /tasks - Add a new task
+app.post('/tasks', async (req, res) => {
+    const { description, status } = req.body;
+  
+    if (!description || !status) {
+      return res.status(400).json({ error: 'Description and status are required' });
+    }
+  
+    try {
+      const result = await pool.query(
+        'INSERT INTO tasks (description, status) VALUES ($1, $2) RETURNING *;',
+        [description, status]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  
 
 // PUT /tasks/:id - Update a task's status
-app.put('/tasks/:id', (request, response) => {
-    const taskId = parseInt(request.params.id, 10);
-    const { status } = request.body;
-    const task = tasks.find(t => t.id === taskId);
+app.put('/tasks/:id', async (req, res) => {
+    const taskId = parseInt(req.params.id, 10);
+    const { status } = req.body;
 
-    if (!task) {
-        return response.status(404).json({ error: 'Task not found' });
+    if (!status) {
+        return res.status(400).json({ error: 'Status is required' });
     }
-    task.status = status;
-    response.json({ message: 'Task updated successfully' });
+
+    try {
+        const result = await pool.query(
+            'UPDATE tasks SET status = $1 WHERE id = $2 RETURNING *;',
+            [status, taskId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
+
 
 // DELETE /tasks/:id - Delete a task
-app.delete('/tasks/:id', (request, response) => {
-    const taskId = parseInt(request.params.id, 10);
-    const initialLength = tasks.length;
-    tasks = tasks.filter(t => t.id !== taskId);
+app.delete('/tasks/:id', async (req, res) => {
+    const taskId = parseInt(req.params.id, 10);
 
-    if (tasks.length === initialLength) {
-        return response.status(404).json({ error: 'Task not found' });
+    try {
+        const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING *;', [taskId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        res.json({ message: 'Task deleted successfully', task: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-    response.json({ message: 'Task deleted successfully' });
 });
+
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
